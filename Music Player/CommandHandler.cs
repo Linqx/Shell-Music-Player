@@ -30,13 +30,15 @@ namespace ShellMusicPlayer
                         break;
                     }
 
-                    if (!Directory.Exists(split[1]))
+                    string dir = string.Join(" ", split.Where((_, i) => i > 0).ToArray());
+
+                    if (!Directory.Exists(dir))
                     {
                         Console.WriteLine("Invalid directory! Input a valid directory.");
                         break;
                     }
 
-                    Program.CurrentDirectory = split[1]; ;
+                    Program.CurrentDirectory = dir;
                     Console.WriteLine($"Directory set to: {Program.CurrentDirectory}");
                     break;
                 case "play":
