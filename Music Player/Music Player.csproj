@@ -8,11 +8,12 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>ShellMusicPlayer</RootNamespace>
     <AssemblyName>Shell Music Player</AssemblyName>
-    <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
     <TargetFrameworkProfile />
+    <LangVersion>9</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -82,6 +83,10 @@
     <StartupObject>ShellMusicPlayer.Program</StartupObject>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed">
+      <HintPath>..\packages\Newtonsoft.Json.12.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -96,9 +101,11 @@
     <Compile Include="DiscordManager.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TagsManager.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <COMReference Include="WMPLib">
@@ -118,6 +125,10 @@
     <Content Include="icon.ico" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\KirokuLogging\KirokuLogging.csproj">
+      <Project>{584eaa7b-56de-4f4d-8d0e-020f32894086}</Project>
+      <Name>KirokuLogging</Name>
+    </ProjectReference>
     <ProjectReference Include="..\SharpPresence\SharpPresence.csproj">
       <Project>{1E71FD4F-FCF4-4859-A6FC-AAF0054BEEBC}</Project>
       <Name>SharpPresence</Name>

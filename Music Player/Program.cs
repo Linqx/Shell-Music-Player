@@ -1,246 +1,369 @@
-﻿using System;
+﻿// --------------------------------------------------------------------
+//                             Program.cs
+// --------------------------------------------------------------------
+// Author: Danny Guardado (Linqx)
+// Created: 09/01/2020
+
+using System;
 using System.IO;
 using System.Linq;
+using System.Text;
+using KirokuLogging;
 using WMPLib;
 
 namespace ShellMusicPlayer
 {
-    class Program
-    { 
-        #region Private        
+	internal class Program
+	{
 
-        private static DiscordManager Discord;
-        private static CommandHandler CommandHandler;
+		private static DiscordManager Discord;
+		private static CommandHandler CommandHandler;
 
-        private static WindowsMediaPlayer SoundPlayer;                
-        private static Random Random = new Random(Environment.TickCount);
-        
-        private static bool ContinueRandom = false;
-        private static bool WaitingForReady = false;
-        private static bool Paused = false;
-        private static string Filter = "";
+		private static WindowsMediaPlayer SoundPlayer;
+		private static readonly Random Random = new Random(Environment.TickCount);
 
-        #endregion
+		private static string Title => $"Danny's Music Player - {CurrentSong}";
+		private static string Title_Paused => $"Danny's Music Player - Paused";
+		private static bool ContinueRandom;
+		private static bool WaitingForReady;
+		private static string Filter = "";
+		private static string CurrentPosition = "";
+		private static string Tag = "";
+		
+		public static string CurrentSong = "";
+		public static string CurrentSongPath = "";
+		public static string CurrentDirectory = null;
+		public static bool Running = true;
 
-        #region Public
+		private static void Main(string[] args)
+		{
+			Console.Title = "Danny's Music Player";
+			Console.OutputEncoding = Encoding.UTF8;
 
-        public static string CurrentDirectory = null;
-        public static bool Running = true;
+			Kiroku.Log("Music Player", ConsoleColor.DarkCyan, 
+				"Started with Discord Presence: Enabled", ConsoleColor.Cyan);
+			
+			Discord = new DiscordManager();
+			CommandHandler = new CommandHandler();
 
-        #endregion
+			SoundPlayer = new WindowsMediaPlayer();
+			SoundPlayer.PlayStateChange += SoundPlayer_PlayStateChange;
 
-        #region Main
+			TagsManager.Initialize();
+			
+			SetDiscord();
+			SetVolume(10);
 
-        static void Main(string[] args)
-        {
-            Console.Title = "Danny's Music Player";
-
-            Discord = new DiscordManager();
-            CommandHandler = new CommandHandler();
-
-            SetDiscord();
-
-            SoundPlayer = new WindowsMediaPlayer();
-            SoundPlayer.PlayStateChange += SoundPlayer_PlayStateChange;
-
-            while (Running)
-                CommandHandler.Handle(Console.ReadLine());
-        }
-
-        #endregion
-
-        #region Discord
-
-        public static void SetDiscord() => Discord.SetDiscord();
-
-        public static void UpdatePresence()
-        {
-            if (!string.IsNullOrEmpty(Filter))
-                Discord.SmallImageText = $"Filter: {Filter}";
-            else
-                Discord.SmallImageText = "No Filter Set";
-
-            Discord.UpdatePresence();
-        }
-
-        #endregion
-
-        #region Functions
-
-        public static void List()
-        {
-            if (!Directory.Exists(CurrentDirectory))
-            {
-                Console.WriteLine("The current direction does not exist! Please set the directory and try again");
-                return;
-            }
-
-            var songs = Directory.EnumerateFiles(CurrentDirectory, "*.mp3", SearchOption.AllDirectories).ToArray();
-
-            if (!string.IsNullOrEmpty(Filter))
-                songs = songs.Where(_ => _.IndexOf(Filter, StringComparison.CurrentCultureIgnoreCase) != -1).ToArray();
-
-            foreach (var i in songs)
-                Console.WriteLine(Path.GetFileName(i));
-
-            Console.WriteLine($"{songs.Length} songs found");
-        }
-
-        public static void SetFilter(string[] parameters)
-        {
-            if (!Directory.Exists(CurrentDirectory))
-            {
-                Console.WriteLine("The current direction does not exist! Please set the directory and try again");
-                return;
-            }
-
-            if (!string.IsNullOrEmpty(Filter) && parameters.Length == 0 || (parameters.Length == 1 && parameters[0] == ""))
-            {
-                Filter = "";
-                Console.WriteLine("Filter removed!");
-
-                UpdatePresence();
-                return;
-            }
-
-            if (parameters.Length == 0)
-            {
-                Console.WriteLine("This command needs at least 1 parameter");
-                return;
-            }
-
-            var songs = Directory.EnumerateFiles(CurrentDirectory, "*.mp3", SearchOption.AllDirectories).ToArray();
-
-            if (!string.IsNullOrEmpty(string.Join(" ", parameters)))
-                songs = songs.Where(_ => _.IndexOf(string.Join(" ", parameters), StringComparison.CurrentCultureIgnoreCase) != -1).ToArray();
-
-            if (songs.Length > 0)
-                Filter = string.Join(" ", parameters);
-            else
-                Console.WriteLine($"There are no songs that contain the filter: {string.Join(" ", parameters)}. Filter not set");
-
-            UpdatePresence();
-        }
-
-        public static void ShowFilter()
-        {
-            if (!string.IsNullOrEmpty(Filter))
-                Console.WriteLine($"The current filter is: {Filter}");
-            else
-                Console.WriteLine("There is no filter set");
-        }
-
-        public static void PlayRandom()
-        {
-            if (!Directory.Exists(CurrentDirectory))
-            {
-                Console.WriteLine("The current direction does not exist! Please set the directory and try again");
-                return;
-            }
-
-            Paused = false;
-
-            var songs = Directory.EnumerateFiles(CurrentDirectory, "*.mp3", SearchOption.AllDirectories).ToArray();
-
-            if (!string.IsNullOrEmpty(Filter))
-                songs = songs.Where(_ => _.IndexOf(Filter, StringComparison.CurrentCultureIgnoreCase) != -1).ToArray();
-
-            var song = songs[Random.Next(songs.Length)];
-
-            ContinueRandom = true;
-            SoundPlayer.URL = song;
-            SoundPlayer.controls.play();
-
-            if (DiscordManager.Enabled)
-            {
-                Discord.LargeImageText = Path.GetFileNameWithoutExtension(song);
-                Discord.State = Path.GetFileNameWithoutExtension(song);
-                Discord.Details = "Listening To:";
-                Discord.StartTimeStamp = DateTimeOffset.Now.ToUnixTimeSeconds();
-
-                UpdatePresence();
-            }
-        }
-
-        public static void Play(string resource)
-        {
-            if (!Directory.Exists(CurrentDirectory))
-            {
-                Console.WriteLine("The current direction does not exist! Please set the directory and try again");
-                return;
-            }
-
-            string dir = $"{CurrentDirectory}\\{resource}";
-
-            if (File.Exists(dir))
-            {               
-                Paused = false;
-                ContinueRandom = false;
-
-                SoundPlayer.URL = dir;
-                SoundPlayer.controls.play();
-
-                if (DiscordManager.Enabled)
-                {
-                    Discord.LargeImageText = Path.GetFileNameWithoutExtension(dir);
-                    Discord.State = Path.GetFileNameWithoutExtension(dir);
-                    Discord.Details = "Listening To:";
-                    Discord.StartTimeStamp = DateTimeOffset.Now.ToUnixTimeSeconds();
-
-                    UpdatePresence();
-                }
-            }
-            else
-                Console.WriteLine($"File: {CurrentDirectory}\\{resource} was not found!");
-        }
-
-        public static void Pause()
-        {
-            if (DiscordManager.Enabled)
-                Discord.Pause();
-
-            Paused = true;
-
-            if (SoundPlayer.playState == WMPPlayState.wmppsPlaying)
-                SoundPlayer.controls.pause();
-        }
+			while (Running)
+			{
+				try
+				{
+					CommandHandler.Handle(Console.ReadLine());
+				}
+				catch (Exception ex)
+				{
+					Kiroku.Log("Failure", ConsoleColor.DarkRed, ex, ConsoleColor.Red);
+				}
+			}
+		}
 
 
-        public static void Resume()
-        {
-            if (DiscordManager.Enabled)
-                Discord.Resume();
+		public static void SetDiscord()
+		{
+			Discord.SetDiscord();
+		}
 
-            if (SoundPlayer.playState == WMPPlayState.wmppsPaused)
-                SoundPlayer.controls.play();
-        }
+		public static void UpdatePresence()
+		{
+			if (!string.IsNullOrEmpty(Filter))
+			{
+				Discord.SmallImageText = $"Filter: {Filter}";
+			}
+			else
+			{
+				Discord.SmallImageText = "No Filter Set";
+			}
 
-        #endregion
+			Discord.UpdatePresence();
+		}
 
-        #region Events
+		public static void List()
+		{
+			if (!Directory.Exists(CurrentDirectory))
+			{
+				Kiroku.Log("Commands.List", ConsoleColor.DarkYellow,
+					"There is no directory selected. Please select a directory first and try again", ConsoleColor.Yellow);
+				return;
+			}
 
-        private static void SoundPlayer_PlayStateChange(int NewState)
-        {
-            //Console.WriteLine($"Play State Changed: {((WMPPlayState)NewState).ToString()}");
+			string[] songs = GetSongs();
 
-            if (NewState == (int)WMPPlayState.wmppsPlaying && !Paused)
-                Console.WriteLine($"Now playing: {Path.GetFileName(SoundPlayer.URL)} ({SoundPlayer.controls.currentItem.durationString})");
+			foreach (string i in songs)
+			{
+				Kiroku.Log(null, ConsoleColor.White,
+					Path.GetFileName(i), ConsoleColor.Gray);
+			}
 
-            if (NewState == (int)WMPPlayState.wmppsMediaEnded && ContinueRandom)
-            {
-                Paused = false;
-                WaitingForReady = true;
-                Console.WriteLine($"{Path.GetFileName(SoundPlayer.URL)} has ended");
-            }
-            else if (WaitingForReady && NewState == (int)WMPPlayState.wmppsStopped && ContinueRandom)
-            {
-                WaitingForReady = false;
+			Kiroku.Log("Commands.List", ConsoleColor.White,
+				$"{songs.Length} songs found", ConsoleColor.Gray);
+		}
 
-                Action action = () => PlayRandom();
-                action.BeginInvoke(action.EndInvoke, null);
-            }
-        }
+		public static void SetFilter(string[] parameters)
+		{
+			if (!Directory.Exists(CurrentDirectory))
+			{
+				Kiroku.Log("Commands.Filter", ConsoleColor.DarkYellow,
+					"There is no directory selected. Please select a directory first and try again", ConsoleColor.Yellow);
+				return;
+			}
 
-        #endregion
-    }
+			if (!string.IsNullOrEmpty(Filter) && parameters.Length == 0 ||
+			    parameters.Length == 1 && parameters[0] == "")
+			{
+				Kiroku.Log("Commands.Filter", ConsoleColor.White,
+					$"Filter: {Filter} was removed.", ConsoleColor.Gray);
+				
+				Filter = "";
+				UpdatePresence();
+				return;
+			}
+
+			if (parameters.Length == 0)
+			{
+				Kiroku.Log("Commands.Filter", ConsoleColor.DarkYellow,
+					$"To set a filter, a parameter is required.", ConsoleColor.Yellow);
+				return;
+			}
+
+			string filter = string.Join(" ", parameters);
+			string[] songs = GetSongs(filter);
+
+			if (songs.Length > 0)
+			{
+				Filter = filter;
+				
+				Kiroku.Log("Commands.Filter", ConsoleColor.DarkGreen, 
+					$"Filter set to: {Filter}", ConsoleColor.Green);
+			}
+			else
+			{
+				Kiroku.Log("Commands.Filter", ConsoleColor.DarkYellow,
+					$"No songs were found that contain the filter: {string.Join(" ", parameters)}. Filter was not set.", ConsoleColor.Yellow);
+			}
+
+			UpdatePresence();
+		}
+
+		public static void ShowFilter()
+		{
+			if (!string.IsNullOrEmpty(Filter))
+			{
+				Kiroku.Log("Commands.ShowFilter", ConsoleColor.White,
+					$"The current filter is: {Filter}", ConsoleColor.Gray);
+			}
+			else
+			{
+				Kiroku.Log("Commands.ShowFilter", ConsoleColor.White,
+					$"There is currently no filter.", ConsoleColor.Gray);
+			}
+		}
+
+		public static void PlayRandom()
+		{
+			if (string.IsNullOrWhiteSpace(Tag) && !Directory.Exists(CurrentDirectory))
+			{
+				Kiroku.Log("Commands.Random", ConsoleColor.DarkYellow,
+					"There is no directory or tag selected. Please select a directory or tag first and try again", ConsoleColor.Yellow);
+				return;
+			}
+
+			string[] songs = GetSongs();
+			string song = songs[Random.Next(songs.Length)];
+
+			ContinueRandom = true;
+			
+			PlaySong(song);
+		}
+
+		public static void Play(string resource)
+		{
+			if (!Directory.Exists(CurrentDirectory))
+			{
+				Kiroku.Log("Commands.Play", ConsoleColor.DarkYellow,
+					"There is no directory selected. Please select a directory first and try again", ConsoleColor.Yellow);
+				return;
+			}
+
+			string dir = $"{CurrentDirectory}\\{resource}";
+			if (File.Exists(dir))
+			{
+				ContinueRandom = false;
+				
+				PlaySong(dir);
+			}
+			else
+			{
+				Kiroku.Log("Commands.Play", ConsoleColor.DarkRed,
+					$"File: {CurrentDirectory}\\{resource} was not found!", ConsoleColor.Red);
+			}
+		}
+
+		private static void PlaySong(string song)
+		{
+			SoundPlayer.URL = song;
+
+			CurrentPosition = "";
+			SoundPlayer.controls.play();
+
+			CurrentSong = Path.GetFileNameWithoutExtension(SoundPlayer.URL);
+			CurrentSongPath = SoundPlayer.URL;
+			Console.Title = Title;	
+			
+			if (DiscordManager.Enabled)
+			{
+				Discord.LargeImageText = Path.GetFileNameWithoutExtension(song);
+				Discord.State = Encoding.UTF8.GetString(Encoding.UTF8.GetBytes(Path.GetFileNameWithoutExtension(song)));
+				Discord.Details = "Listening To:";
+				Discord.StartTimeStamp = DateTimeOffset.Now.ToUnixTimeSeconds();
+
+				UpdatePresence();
+			}
+		}
+		
+		public static void Pause()
+		{
+			if (DiscordManager.Enabled)
+			{
+				Discord.Pause();
+			}
+
+			if (SoundPlayer.playState == WMPPlayState.wmppsPlaying)
+			{
+				CurrentPosition = SoundPlayer.controls.currentPositionString;
+				SoundPlayer.controls.pause();
+				Console.Title = Title_Paused;
+			}
+		}
+
+
+		public static void Resume()
+		{
+			if (DiscordManager.Enabled)
+			{
+				Discord.Resume();
+			}
+
+			if (SoundPlayer.playState == WMPPlayState.wmppsPaused)
+			{
+				SoundPlayer.controls.play();
+				Console.Title = Title;
+			}
+		}
+
+		public static void SetVolume(int volume)
+		{
+			SoundPlayer.settings.volume = volume;
+		}
+
+		public static void Replay()
+		{
+			SoundPlayer.controls.currentPosition = 0;
+		}
+
+		public static void Speed(double speed)
+		{
+			SoundPlayer.settings.rate = speed;
+		}
+
+		private static void SoundPlayer_PlayStateChange(int NewState)
+		{
+			if (NewState == (int) WMPPlayState.wmppsPlaying)
+			{
+				if (!string.IsNullOrWhiteSpace(CurrentPosition))
+				{
+					Kiroku.Log("Music Player", ConsoleColor.DarkCyan,
+						$"Now playing: {Path.GetFileName(SoundPlayer.URL)} ({CurrentPosition} / {SoundPlayer.controls.currentItem.durationString})", ConsoleColor.Cyan);
+				}
+				else
+				{
+					Kiroku.Log("Music Player", ConsoleColor.DarkCyan,
+						$"Now playing: {Path.GetFileName(SoundPlayer.URL)} ({SoundPlayer.controls.currentItem.durationString})", ConsoleColor.Cyan);	
+				}
+			}
+			
+			if (NewState == (int) WMPPlayState.wmppsMediaEnded && ContinueRandom)
+			{
+				WaitingForReady = true;
+				Kiroku.Log("Music Player", ConsoleColor.DarkMagenta,
+					$"{Path.GetFileName(SoundPlayer.URL)} has ended", ConsoleColor.Magenta);
+			}
+			else if (WaitingForReady && NewState == (int) WMPPlayState.wmppsStopped && ContinueRandom)
+			{
+				WaitingForReady = false;
+
+				Action action = PlayRandom;
+				action.BeginInvoke(action.EndInvoke, null);
+			}
+		}
+
+		public static void SetTag(string tag = null)
+		{
+			if (string.IsNullOrWhiteSpace(Tag) && string.IsNullOrWhiteSpace(tag))
+			{
+				Kiroku.Log("Commands.Tags", ConsoleColor.DarkYellow, "Missing parameter to set tag.", ConsoleColor.Yellow);
+				return;
+			}
+
+			if (!string.IsNullOrWhiteSpace(Tag) && string.IsNullOrWhiteSpace(tag))
+			{
+				Kiroku.Log("Commands.Tags", ConsoleColor.DarkGreen, $"The tag: {Tag} has been removed.", ConsoleColor.Green);
+				Tag = "";
+				return;
+			}
+
+			tag = tag.ToLower();
+			
+			if (!string.IsNullOrWhiteSpace(tag) && TagsManager.TaggedSongs.ContainsKey(tag))
+			{
+				Kiroku.Log("Commands.Tags", ConsoleColor.DarkGreen, $"Tag set to: {tag}", ConsoleColor.Green);
+				Tag = tag;
+			}
+			else
+			{
+				Kiroku.Log("Commands.Tags", ConsoleColor.DarkRed, $"The tag: {tag} was not found in the database.", ConsoleColor.Red);
+			}
+		}
+		
+		private static string[] GetSongs(string filter = null)
+		{
+			string[] songs = new string[0];
+			
+			if (!string.IsNullOrWhiteSpace(Tag))
+			{
+				if (TagsManager.TaggedSongs.Keys.Contains(Tag))
+				{
+					songs = TagsManager.TaggedSongs[Tag].ToArray();
+				}
+			}
+			else
+			{
+				if (string.IsNullOrWhiteSpace(filter))
+				{
+					filter = Filter;
+				}
+
+				songs = Directory.EnumerateFiles(CurrentDirectory, "*.mp3", SearchOption.AllDirectories)
+					.Concat(Directory.EnumerateFiles(CurrentDirectory, "*.m4a", SearchOption.AllDirectories))
+					.ToArray();
+
+				if (!string.IsNullOrEmpty(filter))
+				{
+					songs = songs.Where(_ => _.IndexOf(filter, StringComparison.CurrentCultureIgnoreCase) != -1)
+						.ToArray();
+				}
+			}
+
+			return songs;
+		}
+	}
 }

@@ -1,5 +1,10 @@
-﻿using System.Reflection;
-using System.Runtime.CompilerServices;
+﻿// --------------------------------------------------------------------
+//                             AssemblyInfo.cs
+// --------------------------------------------------------------------
+// Author: Danny Guardado (Linqx)
+// Created: 09/01/2020
+
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 // General Information about an assembly is controlled through the following
